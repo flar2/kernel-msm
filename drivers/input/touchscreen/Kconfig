@@ -1132,4 +1132,10 @@ config TOUCHSCREEN_SYNAPTICS_DSX_CTRL_ACCESS_BLK
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_dsx_control_access_block
 
+config SWEEP2SLEEP
+        tristate "Sweep to put device to sleep"
+        default y
+        help
+          Say Y here to support sweep2sleep
+
 endif
