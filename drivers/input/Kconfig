@@ -194,6 +194,11 @@ config SENSORS_HALL
 	 Say y here if you want to use this hall sensor driver, it
 	 is like a switch. For example, lid.
 
+config HOMEBUTTON
+	tristate "Home button driver"
+	help
+	  Say Y here if you want home button to be visible to apps
+
 comment "Input Device Drivers"
 
 source "drivers/input/keyboard/Kconfig"
