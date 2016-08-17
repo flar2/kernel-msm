@@ -5447,9 +5447,40 @@ static struct kobj_attribute mic_gain_attribute =
 		mic_gain_show,
 		mic_gain_store);
 
+#include "cs35l34.h"
+struct snd_soc_codec *cs35l34_codec_ptr;
+
+static ssize_t speaker_gain_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		snd_soc_read(cs35l34_codec_ptr, CS35L34_AMP_DIG_VOL));
+}
+
+static ssize_t speaker_gain_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int input;
+
+	sscanf(buf, "%d", &input);
+
+	if (input < -10 || input > 20)
+		input = 0;
+
+	snd_soc_write(cs35l34_codec_ptr, CS35L34_AMP_DIG_VOL, input);
+
+	return count;
+}
+
+static struct kobj_attribute speaker_gain_attribute =
+	__ATTR(speaker_gain, 0664,
+		speaker_gain_show,
+		speaker_gain_store);
+
 static struct attribute *sound_control_attrs[] = {
 		&headphone_gain_attribute.attr,
 		&mic_gain_attribute.attr,
+		&speaker_gain_attribute.attr,
 		NULL,
 };
 

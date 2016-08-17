@@ -544,6 +544,10 @@ static struct snd_soc_dai_driver cs35l34_dai = {
 		.symmetric_rates = 1,
 };
 
+#ifdef CONFIG_SOUND_CONTROL
+extern struct snd_soc_codec *cs35l34_codec_ptr;
+#endif
+
 static int cs35l34_probe(struct snd_soc_codec *codec)
 {
 	int ret = 0;
@@ -552,6 +556,9 @@ static int cs35l34_probe(struct snd_soc_codec *codec)
 
 	codec->control_data = cs35l34->regmap;
 
+#ifdef CONFIG_SOUND_CONTROL
+	cs35l34_codec_ptr = codec;
+#endif
 	regmap_read(cs35l34->regmap, CS35L34_PROTECT_CTL, &reg);
 	reg &= ~(1 << 2);
 	reg |= 1 << 3;
