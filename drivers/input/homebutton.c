@@ -23,7 +23,7 @@ struct homebutton_data {
 	unsigned int key;
 } hb_data = {
 	.vib_strength = VIB_STRENGTH,
-	.enable = true,
+	.enable = false,
 	.key = KEY_HOME
 };
 
