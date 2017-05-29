@@ -101,3 +101,4 @@ obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CTRL_ACCESS_BLK) += synaptics_dsx_control
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_I2C) 	+= himax_mmi/
 obj-$(CONFIG_TOUCHSCREEN_NT36xxx)		+= nova_mmi/
 obj-$(CONFIG_TOUCHSCREEN_ILITEK)	+= mstar/
+obj-$(CONFIG_WAKE_GESTURES)		+= wake_gestures.o
