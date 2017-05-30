@@ -404,6 +404,8 @@ struct qpnp_hap {
 	bool perform_lra_auto_resonance_search;
 	uint8_t low_vmax;
 	bool context_haptics;
+	u32 fp_vib;
+	bool fp_block;
 };
 
 static struct qpnp_hap *ghap;
@@ -1474,6 +1476,42 @@ static ssize_t qpnp_hap_vmax_mv_strong_store(struct device *dev,
 	return count;
 }
 
+/* sysfs show fingerprint vib disable */
+static ssize_t qpnp_hap_fp_vib_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct timed_output_dev *timed_dev = dev_get_drvdata(dev);
+	struct qpnp_hap *hap = container_of(timed_dev, struct qpnp_hap,
+					 timed_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", hap->fp_vib);
+}
+
+/* sysfs store  fingerprint vib disable */
+static ssize_t qpnp_hap_fp_vib_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct timed_output_dev *timed_dev = dev_get_drvdata(dev);
+	struct qpnp_hap *hap = container_of(timed_dev, struct qpnp_hap,
+					 timed_dev);
+	u32 val;
+	ssize_t ret;
+
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return ret;
+
+	if ((val < 0) || (val > 100))
+		return -EINVAL;
+
+	mutex_lock(&hap->wf_lock);
+	hap->fp_vib = val;
+	mutex_unlock(&hap->wf_lock);
+
+	return count;
+}
+
+
 /* sysfs attributes */
 static struct device_attribute qpnp_hap_attrs[] = {
 	__ATTR(wf_s0, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -1524,6 +1562,9 @@ static struct device_attribute qpnp_hap_attrs[] = {
 	__ATTR(vmax_mv_strong, (S_IRUGO | S_IWUSR | S_IWGRP),
 			qpnp_hap_vmax_mv_strong_show,
 			qpnp_hap_vmax_mv_strong_store),
+	__ATTR(fp_vib, (S_IRUGO | S_IWUSR | S_IWGRP),
+			qpnp_hap_fp_vib_show,
+			qpnp_hap_fp_vib_store),
 };
 
 static int calculate_lra_code(struct qpnp_hap *hap)
@@ -1798,6 +1839,17 @@ static void qpnp_hap_td_enable(struct timed_output_dev *dev, int value)
 
 	hrtimer_cancel(&hap->hap_timer);
 
+	if (!strncmp(current->comm, "InputReader", 11)) {
+		hap->fp_block = true;
+		mutex_unlock(&hap->lock);
+		return;
+	}
+
+	if (hap->fp_block) {
+		hap->fp_block = false;
+		value = hap->fp_vib;
+	}
+
 	if (value == 0) {
 		if (hap->state == 0) {
 			mutex_unlock(&hap->lock);
@@ -1805,8 +1857,7 @@ static void qpnp_hap_td_enable(struct timed_output_dev *dev, int value)
 		}
 		hap->state = 0;
 	} else {
-
-		if (hap->vmax_mv == QPNP_HAP_VMAX_MIN_MV) {
+		if (value == 0 || hap->vmax_mv == QPNP_HAP_VMAX_MIN_MV) {
 			mutex_unlock(&hap->lock);
 			return;
 		}
@@ -2690,6 +2741,8 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 		pr_err("Unable to check PMIC version rc=%d\n", rc);
 		return rc;
 	}
+
+	hap->fp_vib = 24;
 
 	rc = qpnp_hap_parse_dt(hap);
 	if (rc) {
