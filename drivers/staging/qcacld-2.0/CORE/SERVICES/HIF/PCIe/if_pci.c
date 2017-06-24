@@ -805,15 +805,6 @@ wlan_tasklet(unsigned long data)
     CE_per_engine_service_any(sc->irq_event, sc);
     adf_os_atomic_set(&sc->tasklet_from_intr, 0);
     if (CE_get_rx_pending(sc)) {
-        if (vos_is_load_unload_in_progress(VOS_MODULE_ID_HIF, NULL)) {
-            pr_err("%s: Load/Unload in Progress\n", __func__);
-            goto end;
-        }
-        if (vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL)) {
-            pr_err("%s: LOGP in progress\n", __func__);
-            goto end;
-        }
-
         /*
          * There are frames pending, schedule tasklet to process them.
          * Enable the interrupt only when there is no pending frames in
@@ -824,8 +815,6 @@ wlan_tasklet(unsigned long data)
 #else
         tasklet_schedule(&sc->intr_tq);
 #endif
-
-end:
         adf_os_atomic_set(&sc->ce_suspend, 1);
         return;
     }
@@ -1682,7 +1671,6 @@ again:
 
     OS_MEMZERO(sc, sizeof(*sc));
     sc->mem = mem;
-    sc->mem_len = pci_resource_len(pdev, BAR_NUM);
     sc->pdev = pdev;
     sc->dev = &pdev->dev;
 
@@ -2723,43 +2711,6 @@ void hif_pci_crash_shutdown(struct pci_dev *pdev)
 
 #define OL_ATH_PCI_PM_CONTROL 0x44
 
-/**
- * hif_disable_tasklet_noclient() - API to disable tasklet in D3WOW
- * @sc: HIF Context
- * @wma_hdl: WMA Handle
- *
- * This API allows to disable the tasklet in D3-wow
- * cases.
- *
- * Return: None
- */
-static void hif_disable_tasklet_noclient(struct hif_pci_softc *sc,
-			void *wma_hdl)
-{
-	if (!wma_get_client_count(wma_hdl)) {
-		tasklet_disable(&sc->intr_tq);
-		pr_debug("%s: tasklet disabled\n", __func__);
-	}
-}
-
-/**
- * hif_enable_tasklet_noclient() - API to enable tasklet in D3WOW
- * @sc: HIF Context
- * @wma_hdl: WMA Handle
- *
- * This API allows to enable the tasklet in D3-wow
- * cases.
- *
- * Return: None
- */
-static void hif_enable_tasklet_noclient(struct hif_pci_softc *sc, void *wma_hdl)
-{
-	if (!wma_get_client_count(wma_hdl)) {
-		tasklet_enable(&sc->intr_tq);
-		pr_debug("%s: tasklet disabled\n", __func__);
-	}
-}
-
 static int
 __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
 {
@@ -2837,7 +2788,7 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         msleep(10);
     }
 
-    hif_disable_tasklet_noclient(sc, temp_module);
+    tasklet_disable(&sc->intr_tq);
     hif_irq_record(HIF_SUSPEND_AFTER_WOW, sc);
 
 #ifdef FEATURE_WLAN_D0WOW
@@ -3063,7 +3014,7 @@ skip:
         goto out;
     }
 
-    hif_enable_tasklet_noclient(sc, temp_module);
+    tasklet_enable(&sc->intr_tq);
 
     if (!wma_is_wow_mode_selected(temp_module))
         err = wma_resume_target(temp_module, runtime_pm);
@@ -3189,6 +3140,10 @@ void hif_disable_isr(void *ol_sc)
 	scn->MSI_magic = NULL;
 	scn->MSI_magic_dma = 0;
 #endif
+	/* disable the tasklet to avoid recursive scheduling
+	 * of tasklet if rx pending packet count is greater
+	 * than 0. */
+	tasklet_disable(&hif_sc->intr_tq);
 	/* Cancel the pending tasklet */
 	tasklet_kill(&hif_sc->intr_tq);
 }

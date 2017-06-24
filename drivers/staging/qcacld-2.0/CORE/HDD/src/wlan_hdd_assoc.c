@@ -1827,12 +1827,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
         wlan_hdd_auto_shutdown_enable(pHddCtx, VOS_FALSE);
 #endif
-        /* validate cfg_ini */
-        if (!pHddCtx->cfg_ini) {
-                VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                          "cfg_ini is NULL");
-                return eHAL_STATUS_E_NULL_VALUE;
-        }
+
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
         if ((pHddCtx->cfg_ini->WlanMccToSccSwitchMode
                 != VOS_MCC_TO_SCC_SWITCH_DISABLE) &&
@@ -4016,8 +4011,7 @@ hdd_smeRoamCallback(void *pContext, tCsrRoamInfo *pRoamInfo, tANI_U32 roamId,
                 /* Call to clear any MC Addr List filter applied after
                  * successful connection.
                  */
-                if (wlan_hdd_set_mc_addr_list(pAdapter, FALSE))
-                    hddLog(VOS_TRACE_LEVEL_ERROR, FL("failed to clear mc addr list"));
+                wlan_hdd_set_mc_addr_list(pAdapter, FALSE);
 #endif
             }
             break;

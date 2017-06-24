@@ -380,6 +380,23 @@ limSendProbeReqMgmtFrame(tpAniSirGlobal pMac,
        limLog(pMac, LOGE,
               FL("session entry null, ext capabilities will not be populated"));
 
+    // That's it-- now we pack it.  First, how much space are we going to
+    // need?
+    nStatus = dot11fGetPackedProbeRequestSize( pMac, &pr, &nPayload );
+    if ( DOT11F_FAILED( nStatus ) )
+    {
+        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
+                               "or a Probe Request (0x%08x)."), nStatus );
+        // We'll fall back on the worst case scenario:
+        nPayload = sizeof( tDot11fProbeRequest );
+    }
+    else if ( DOT11F_WARNED( nStatus ) )
+    {
+        limLog( pMac, LOGW, FL("There were warnings while calculating"
+                               "the packed size for a Probe Request ("
+                               "0x%08x)."), nStatus );
+    }
+
     if (addn_ielen) {
 
         vos_mem_set((tANI_U8 *)&extracted_ext_cap,
@@ -396,36 +413,11 @@ limSendProbeReqMgmtFrame(tpAniSirGlobal pMac,
             if (p_ext_cap->interworkingService)
                 p_ext_cap->qosMap = 1;
 
-            extracted_ext_cap.num_bytes =
-                    lim_compute_ext_cap_ie_length(&extracted_ext_cap);
-            extracted_ext_cap_flag = (extracted_ext_cap.num_bytes > 0);
+            extracted_ext_cap_flag = lim_is_ext_cap_ie_present(p_ext_cap);
         }
     }
-    /* merge the ExtCap struct */
-    if (extracted_ext_cap_flag)
-        lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap, true);
 
-    /*
-     * That's it-- now we pack it.
-     * First, how much space are we going to need?
-     */
-    nStatus = dot11fGetPackedProbeRequestSize(pMac, &pr, &nPayload);
-    if (DOT11F_FAILED(nStatus))
-    {
-        limLog(pMac, LOGE,
-             FL("Failed to calculate the packed size for a Probe Request (0x%08x)."),
-             nStatus);
-        /* We'll fall back on the worst case scenario: */
-        nPayload = sizeof(tDot11fProbeRequest);
-    }
-    else if (DOT11F_WARNED(nStatus))
-    {
-        limLog(pMac, LOGW,
-             FL("There were warnings while calculating the packed size for a Probe Request (0x%08x)."),
-             nStatus);
-    }
-
-    nBytes = nPayload + sizeof(tSirMacMgmtHdr) + addn_ielen;
+    nBytes = nPayload + sizeof( tSirMacMgmtHdr ) + addn_ielen;
 
     // Ok-- try to allocate some memory:
     halstatus = palPktAlloc( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
@@ -453,6 +445,10 @@ limSendProbeReqMgmtFrame(tpAniSirGlobal pMac,
                     ( void* ) pFrame, ( void* ) pPacket );
         return nSirStatus;      // allocated!
     }
+
+    /* merge the ExtCap struct*/
+    if (extracted_ext_cap_flag)
+        lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap);
 
     // That done, pack the Probe Request:
     nStatus = dot11fPackProbeRequest( pMac, &pr, pFrame +
@@ -579,7 +575,7 @@ limSendProbeRspMgmtFrame(tpAniSirGlobal pMac,
 {
     tDot11fProbeResponse *pFrm;
     tSirRetStatus        nSirStatus;
-    tANI_U32             cfg, nPayload, nBytes = 0, nStatus;
+    tANI_U32             cfg, nPayload, nBytes, nStatus;
     tpSirMacMgmtHdr      pMacHdr;
     tANI_U8             *pFrame;
     void                *pPacket;
@@ -745,6 +741,25 @@ limSendProbeRspMgmtFrame(tpAniSirGlobal pMac,
 #endif // defined(FEATURE_WLAN_WAPI)
 
 
+    nStatus = dot11fGetPackedProbeResponseSize( pMac, pFrm, &nPayload );
+    if ( DOT11F_FAILED( nStatus ) )
+    {
+        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
+                               "or a Probe Response (0x%08x)."),
+                nStatus );
+        // We'll fall back on the worst case scenario:
+        nPayload = sizeof( tDot11fProbeResponse );
+    }
+    else if ( DOT11F_WARNED( nStatus ) )
+    {
+        limLog( pMac, LOGW, FL("There were warnings while calculating"
+                               "the packed size for a Probe Response "
+                               "(0x%08x)."), nStatus );
+    }
+
+    nBytes = nPayload + sizeof( tSirMacMgmtHdr );
+
+
     if( pMac->lim.gpLimRemainOnChanReq )
     {
         nBytes += (pMac->lim.gpLimRemainOnChanReq->length - sizeof( tSirRemainOnChnReq ) );
@@ -812,29 +827,6 @@ limSendProbeRspMgmtFrame(tpAniSirGlobal pMac,
             }
         }
     }
-    /* merge ExtCap IE */
-    if (extractedExtCapFlag)
-    {
-        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap, true);
-    }
-
-    nStatus = dot11fGetPackedProbeResponseSize(pMac, pFrm, &nPayload);
-    if (DOT11F_FAILED(nStatus))
-    {
-        limLog(pMac, LOGE,
-             FL("Failed to calculate the packed size for a Probe Response (0x%08x)."),
-             nStatus);
-        /* We'll fall back on the worst case scenario: */
-        nPayload = sizeof(tDot11fProbeResponse);
-    }
-    else if (DOT11F_WARNED(nStatus))
-    {
-        limLog(pMac, LOGW,
-             FL("There were warnings while calculating the packed size for a Probe Response (0x%08x)."),
-             nStatus);
-    }
-
-    nBytes += nPayload + sizeof(tSirMacMgmtHdr);
 
     halstatus = palPktAlloc( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
                              ( tANI_U16 )nBytes, ( void** ) &pFrame,
@@ -876,6 +868,11 @@ limSendProbeRspMgmtFrame(tpAniSirGlobal pMac,
 
     sirCopyMacAddr(pMacHdr->bssId,psessionEntry->bssId);
 
+    /*merge ExtCap IE*/
+    if (extractedExtCapFlag)
+    {
+        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap);
+    }
     // That done, pack the Probe Response:
     nStatus = dot11fPackProbeResponse( pMac, pFrm, pFrame + sizeof(tSirMacMgmtHdr),
                                        nPayload, &nPayload );
@@ -1227,7 +1224,7 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
     tSirRetStatus        nSirStatus;
     tANI_U8              lleMode = 0, fAddTS;
     tHalBitVal           qosMode, wmeMode;
-    tANI_U32             nPayload = 0, nBytes = 0, nStatus;
+    tANI_U32             nPayload, nBytes, nStatus;
     void                *pPacket;
     eHalStatus           halstatus;
     tUpdateBeaconParams beaconParams;
@@ -1412,6 +1409,23 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
     }
 
     // Allocate a buffer for this frame:
+    nStatus = dot11fGetPackedAssocResponseSize( pMac, &frm, &nPayload );
+    if ( DOT11F_FAILED( nStatus ) )
+    {
+        limLog( pMac, LOGE, FL("Failed to calculate the packed size f"
+                               "or an Association Response (0x%08x)."),
+                nStatus );
+        return;
+    }
+    else if ( DOT11F_WARNED( nStatus ) )
+    {
+        limLog( pMac, LOGW, FL("There were warnings while calculating "
+                               "the packed size for an Association Re"
+                               "sponse (0x%08x)."), nStatus );
+    }
+
+    nBytes = sizeof( tSirMacMgmtHdr ) + nPayload;
+
     if ( pAssocReq != NULL )
     {
         addnIEPresent = (psessionEntry->addIeParams.assocRespDataLen != 0);
@@ -1459,29 +1473,6 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
                                 addnIEPresent, pAssocReq->addIEPresent);
         }
     }
-    /* merge the ExtCap struct */
-    if (extractedExtCapFlag)
-    {
-        lim_merge_extcap_struct(&(frm.ExtCap), &extractedExtCap, true);
-    }
-
-    nStatus = dot11fGetPackedAssocResponseSize(pMac, &frm, &nPayload);
-    if (DOT11F_FAILED(nStatus))
-    {
-        limLog(pMac, LOGE,
-             FL("Failed to calculate the packed size for an Association Response (0x%08x)."),
-             nStatus);
-        return;
-    }
-    else if (DOT11F_WARNED(nStatus))
-    {
-        limLog(pMac, LOGW,
-             FL("There were warnings while calculating the packed size for an Association Response (0x%08x)."),
-             nStatus);
-    }
-
-    nBytes += sizeof(tSirMacMgmtHdr) + nPayload;
-
     halstatus = palPktAlloc( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
                              ( tANI_U16 )nBytes, ( void** ) &pFrame,
                              ( void** ) &pPacket );
@@ -1516,6 +1507,11 @@ limSendAssocRspMgmtFrame(tpAniSirGlobal pMac,
 
     sirCopyMacAddr(pMacHdr->bssId,psessionEntry->bssId);
 
+    /* merge the ExtCap struct*/
+    if (extractedExtCapFlag)
+    {
+        lim_merge_extcap_struct(&(frm.ExtCap), &extractedExtCap);
+    }
     nStatus = dot11fPackAssocResponse( pMac, &frm,
                                        pFrame + sizeof( tSirMacMgmtHdr ),
                                        nPayload, &nPayload );
@@ -2043,7 +2039,7 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
     tANI_U8            *pFrame;
     tSirRetStatus       nSirStatus;
     tLimMlmAssocCnf     mlmAssocCnf;
-    tANI_U32            nBytes = 0, nPayload, nStatus;
+    tANI_U32            nBytes, nPayload, nStatus;
     tANI_U8             fQosEnabled, fWmeEnabled, fWsmEnabled;
     void               *pPacket;
     eHalStatus          halstatus;
@@ -2059,11 +2055,6 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
     tDot11fIEExtCap     extractedExtCap;
     tANI_BOOLEAN        extractedExtCapFlag = eANI_BOOLEAN_TRUE;
     tpSirMacMgmtHdr     pMacHdr;
-    tDot11fIEExtCap     ap_extcap;
-    tANI_U8            *ap_extcap_ptr = NULL;
-    tANI_U8            *pIe = NULL;
-    tANI_U32            ieLen = 0;
-    tANI_U32            fixed_param_len = 0;
 
     if(NULL == psessionEntry)
     {
@@ -2109,10 +2100,7 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
                                           extractedExtCap.bytes;
             if (p_ext_cap->interworkingService)
                 p_ext_cap->qosMap = 1;
-
-            extractedExtCap.num_bytes =
-                    lim_compute_ext_cap_ie_length(&extractedExtCap);
-            extractedExtCapFlag = (extractedExtCap.num_bytes > 0);
+            extractedExtCapFlag = lim_is_ext_cap_ie_present(p_ext_cap);
         }
     } else {
         limLog(pMac, LOG1,
@@ -2317,50 +2305,24 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
 #endif
     }
 #endif
-    /* merge the ExtCap struct */
-    if (extractedExtCapFlag)
+
+    nStatus = dot11fGetPackedAssocRequestSize( pMac, pFrm, &nPayload );
+    if ( DOT11F_FAILED( nStatus ) )
     {
-        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap, true);
+        limLog( pMac, LOGP, FL("Failed to calculate the packed size f"
+                    "or an Association Request (0x%08x)."),
+                nStatus );
+        // We'll fall back on the worst case scenario:
+        nPayload = sizeof( tDot11fAssocRequest );
+    }
+    else if ( DOT11F_WARNED( nStatus ) )
+    {
+        limLog( pMac, LOGW, FL("There were warnings while calculating "
+                    "the packed size for an Association Re "
+                    "quest(0x%08x)."), nStatus );
     }
 
-    /* Clear the bits in EXTCAP IE if AP not advertise it in beacon */
-    if (pFrm->ExtCap.present && psessionEntry->is_ext_caps_present)
-    {
-        fixed_param_len = DOT11F_FF_TIMESTAMP_LEN +
-                          DOT11F_FF_BEACONINTERVAL_LEN +
-                          DOT11F_FF_CAPABILITIES_LEN;
-        vos_mem_zero((tANI_U8*)&ap_extcap, sizeof(tDot11fIEExtCap));
-        if (psessionEntry->beacon && psessionEntry->bcnLen > fixed_param_len)
-        {
-            pIe = psessionEntry->beacon + fixed_param_len;
-            ieLen = psessionEntry->bcnLen - fixed_param_len;
-
-            /* Extract EXTCAP IE from beacon frame */
-            ap_extcap_ptr = lim_get_ie_ptr(pIe, ieLen, DOT11F_EID_EXTCAP);
-            lim_update_extcap_struct(pMac, ap_extcap_ptr, &ap_extcap);
-
-            /* Clear the bits if AP not advertise it in beacon */
-            lim_merge_extcap_struct(&pFrm->ExtCap, &ap_extcap, false);
-        }
-    }
-
-    nStatus = dot11fGetPackedAssocRequestSize(pMac, pFrm, &nPayload);
-    if (DOT11F_FAILED(nStatus))
-    {
-        limLog(pMac, LOGE,
-             FL("Failed to calculate the packed size for an Association Request (0x%08x)."),
-             nStatus);
-        /* We'll fall back on the worst case scenario: */
-        nPayload = sizeof(tDot11fAssocRequest);
-    }
-    else if (DOT11F_WARNED(nStatus))
-    {
-        limLog(pMac, LOGW,
-             FL("There were warnings while calculating the packed size for an Association Request(0x%08x)."),
-             nStatus);
-    }
-
-    nBytes = nPayload + sizeof(tSirMacMgmtHdr) + nAddIELen;
+    nBytes = nPayload + sizeof( tSirMacMgmtHdr ) + nAddIELen;
 
     halstatus = palPktAlloc( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
             ( tANI_U16 )nBytes, ( void** ) &pFrame,
@@ -2405,6 +2367,12 @@ limSendAssocReqMgmtFrame(tpAniSirGlobal   pMac,
         vos_mem_free(pFrm);
         return;
     }
+    /* merge the ExtCap struct*/
+    if (extractedExtCapFlag)
+    {
+        lim_merge_extcap_struct(&pFrm->ExtCap, &extractedExtCap);
+    }
+
     // That done, pack the Assoc Request:
     nStatus = dot11fPackAssocRequest( pMac, pFrm, pFrame +
             sizeof(tSirMacMgmtHdr),

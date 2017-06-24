@@ -1277,9 +1277,7 @@ void vos_free_tlshim_pkt_freeq(pVosSchedContext pSchedContext)
        pkt = list_entry((&pSchedContext->VosTlshimPktFreeQ)->next,
                      typeof(*pkt), list);
        list_del(&pkt->list);
-       spin_unlock_bh(&pSchedContext->VosTlshimPktFreeQLock);
        vos_mem_free(pkt);
-       spin_lock_bh(&pSchedContext->VosTlshimPktFreeQLock);
    }
    spin_unlock_bh(&pSchedContext->VosTlshimPktFreeQLock);
 

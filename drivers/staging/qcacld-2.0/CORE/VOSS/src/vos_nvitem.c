@@ -104,8 +104,7 @@ static v_BOOL_t init_by_reg_core = VOS_FALSE;
 #define REG_RULE_2GHZ_CH12_13 REG_RULE_2467_2472
 
 #define REG_RULE_2GHZ_ALL     REG_RULE_2412_2462,\
-        REG_RULE_2467_2472,\
-        REG_RULE_2484
+        REG_RULE_2467_2472
 
 #define REG_RULE_5GHZ_ALL     REG_RULE_5180_5320,\
         REG_RULE_5500_5720,\
@@ -161,7 +160,7 @@ static const enum phy_ch_width next_lower_bw[] = {
 };
 
 static const struct ieee80211_regdomain vos_world_regdom_60_61_62 = {
-   .n_reg_rules = 6,
+   .n_reg_rules = 5,
    .alpha2 =  "00",
    .reg_rules = {
       REG_RULE_2GHZ_ALL,
@@ -1822,8 +1821,10 @@ static int create_linux_regulatory_entry(struct wiphy *wiphy,
 #else
                 if (0 == err) {
 #endif
-                    wiphy->bands[i]->channels[j].flags &= ~IEEE80211_CHAN_DISABLED;
-
+                    if (wiphy->bands[i]->channels[j].flags & IEEE80211_CHAN_NO_OFDM)
+                        wiphy->bands[i]->channels[j].flags |= IEEE80211_CHAN_DISABLED;
+                    else
+                        wiphy->bands[i]->channels[j].flags &= ~IEEE80211_CHAN_DISABLED;
                     if (!(reg_rule->flags & NL80211_RRF_DFS))
                     {
                         VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyrieht (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -117,6 +117,9 @@
 #define HDD_SET_MCBC_FILTERS_TO_FW      1
 #define HDD_DELETE_MCBC_FILTERS_FROM_FW 0
 
+extern const sRegulatoryChannel *regChannels; //MOT a19110 IKSWM-20881
+
+extern int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, eCsrBand eBand);
 static int ioctl_debug;
 module_param(ioctl_debug, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
@@ -243,7 +246,8 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define WE_DUMP_STATS                         85
 #define WE_CLEAR_STATS                        86
 #define WE_SET_CHANNEL                        87
-
+#define WE_SET_CHANNEL_RANGE                  88  // Motorola, IKDREL3KK-5698
+#define MAX_SUB_CMD                           89  // Motorola, IKDREL3KK-10418
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_NONE_GET_INT    (SIOCIWFIRSTPRIV + 1)
@@ -255,6 +259,7 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 /* 7 is unused */
 #define WE_GET_SAP_AUTO_CHANNEL_SELECTION 8
 #define WE_GET_CONCURRENCY_MODE 9
+#define WE_GET_MCC_MODE 10 /* MOTOROLA IKJB42MAIN-274 */
 #define WE_GET_NSS           11
 #define WE_GET_LDPC          12
 #define WE_GET_TX_STBC       13
@@ -348,6 +353,7 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define WE_GET_OEM_DATA_CAP  13
 #endif
 #define WE_GET_SNR           14
+#define WE_GET_CHANNELS_FOR_AP 15 //MOT a19110 IKSWM-20881
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_NONE_GET_NONE   (SIOCIWFIRSTPRIV + 6)
@@ -1434,6 +1440,85 @@ VOS_STATUS wlan_hdd_get_snr(hdd_adapter_t *pAdapter, v_S7_t *snr)
    return VOS_STATUS_SUCCESS;
 }
 
+//BEGIN MOT a19110 IKSWM-20881 Support get channel list for AP
+static int __iw_get_channel_list_for_ap(struct net_device *dev,
+                          struct iw_request_info *info,
+                          union iwreq_data *wrqu, char *extra)
+{
+    v_U32_t num_channels = 0;
+    v_U8_t i = 0;
+    v_U8_t bandStartChannel = RF_CHAN_1;
+    v_U8_t bandEndChannel = RF_CHAN_165;
+    hdd_adapter_t *pHostapdAdapter = (netdev_priv(dev));
+    tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pHostapdAdapter);
+    tpChannelListInfo channel_list = (tpChannelListInfo)extra;
+    eCsrBand curBand = eCSR_BAND_ALL;
+    hdd_context_t *hdd_ctx;
+    int ret;
+
+    ENTER();
+
+    hdd_ctx = WLAN_HDD_GET_CTX(pHostapdAdapter);
+    ret = wlan_hdd_validate_context(hdd_ctx);
+    if (0 != ret)
+       return ret;
+
+    if (eHAL_STATUS_SUCCESS != sme_GetFreqBand(hHal,&curBand)) {
+        hddLog(LOGE,FL("not able get the current frequency band"));
+        return -EIO;
+    }
+    wrqu->data.length = sizeof(tChannelListInfo);
+    ENTER();
+
+    if (eCSR_BAND_24 == curBand) {
+        bandStartChannel = RF_CHAN_1;
+        bandEndChannel = RF_CHAN_14;
+    }
+    else if (eCSR_BAND_5G == curBand) {
+        bandStartChannel = RF_CHAN_36;
+        bandEndChannel = RF_CHAN_165;
+    }
+    if (curBand != eCSR_BAND_24) {
+        if (hdd_ctx->cfg_ini->dot11p_mode) {
+            bandEndChannel = RF_CHAN_184;
+        } else {
+            bandEndChannel = RF_CHAN_165;
+        }
+    }
+
+    hddLog(LOG1, FL("curBand = %d, bandStartChannel = %hu, "
+            "bandEndChannel = %hu "), curBand,
+            bandStartChannel, bandEndChannel);
+
+    for( i = bandStartChannel; i <= bandEndChannel; i++ ) {
+        if (NV_CHANNEL_ENABLE == regChannels[i].enabled) {
+            channel_list->channels[num_channels] = rfChannels[i].channelNum;
+            num_channels++;
+        }
+    }
+
+    hddLog(LOG1, FL(" number of channels %d"), num_channels);
+
+    channel_list->num_channels = num_channels;
+    EXIT();
+
+    return 0;
+}
+
+static int iw_get_channel_list_for_ap(struct net_device *dev,
+                               struct iw_request_info *info,
+                               union iwreq_data *wrqu, char *extra)
+{
+    int ret;
+
+    vos_ssr_protect(__func__);
+    ret = __iw_get_channel_list_for_ap(dev, info, wrqu,extra);
+    vos_ssr_unprotect(__func__);
+
+    return ret;
+
+}
+//END IKSWM-20881
 void hdd_StatisticsCB( void *pStats, void *pContext )
 {
    hdd_adapter_t             *pAdapter      = (hdd_adapter_t *)pContext;
@@ -2755,13 +2840,6 @@ static int __iw_set_genie(struct net_device *dev, struct iw_request_info *info,
         hddLog(VOS_TRACE_LEVEL_INFO, "%s: IE[0x%X], LEN[%d]",
             __func__, elementId, eLen);
 
-        if (remLen < eLen) {
-            hddLog(LOGE, "Remaining len: %u less than ie len: %u",
-                   remLen, eLen);
-            ret = -EINVAL;
-            goto exit;
-        }
-
         switch ( elementId )
          {
             case IE_EID_VENDOR:
@@ -2844,11 +2922,8 @@ static int __iw_set_genie(struct net_device *dev, struct iw_request_info *info,
                 hddLog (LOGE, "%s Set UNKNOWN IE %X",__func__, elementId);
                 goto exit;
     }
+        genie += eLen;
         remLen -= eLen;
-
-        /* Move genie only if next element is present */
-        if (remLen >= 2)
-            genie += eLen;
     }
 exit:
     EXIT();
@@ -5800,10 +5875,19 @@ static int __iw_setint_getnone(struct net_device *dev,
     hdd_wext_state_t  *pWextState =  WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
     hdd_context_t     *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
     tSmeConfigParams smeConfig;
+    //BEGIN MOT a19110 IKDREL3KK-5698
+#if 0
     int *value = (int *)extra;
     int sub_cmd = value[0];
     int set_value = value[1];
     int ret;
+#endif
+    int cmd_len = wrqu->data.length;
+    int *value = (int *) kmalloc(cmd_len+1, GFP_KERNEL);  // Motorola, IKHSS7-39028
+    int sub_cmd;
+    int set_value;
+    //END IKDREL3KK-5698
+    int ret = 0; /* success */
     int enable_pbm, enable_mp;
     eHalStatus status;
 
@@ -5820,6 +5904,22 @@ static int __iw_setint_getnone(struct net_device *dev,
     INIT_COMPLETION(pWextState->completion_var);
     memset(&smeConfig, 0x00, sizeof(smeConfig));
 
+
+    //BEGIN MOT a19110 IKDREL3KK-5698
+    if(value == NULL)
+        return -ENOMEM;
+
+    if(copy_from_user((char *) value, (char*)(wrqu->data.pointer), cmd_len)) {
+        hddLog(VOS_TRACE_LEVEL_FATAL, "%s -- copy_from_user --data pointer failed! bailing",
+               __FUNCTION__);
+        kfree(value);
+        return -EFAULT;
+    }
+
+    sub_cmd = value[0];
+    set_value = value[1];
+    kfree(value);
+    //END IKDREL3KK-5698
 
     switch(sub_cmd)
     {
@@ -7086,6 +7186,31 @@ static int __iw_setint_getnone(struct net_device *dev,
           }
           break;
         }
+       //BEGIN MOT a19110 IKDREL3KK-5698
+       case WE_SET_CHANNEL_RANGE:
+       {
+           int startChannel, endChannel;
+
+           if (set_value == 3) {
+               startChannel = 149;
+               endChannel   = 161;
+           } else if (set_value == 2) {
+               startChannel = 100;
+               endChannel   = 144;
+           } else if (set_value == 1) {
+               startChannel = 36;
+               endChannel   = 64;
+           } else {
+               set_value = 0;
+               startChannel = 1;
+               endChannel   = 11;
+           }
+           /*Need to understand the changes as this functon call is not their*/
+          // ret = iw_softap_set_channel_range( dev, startChannel, endChannel, set_value);
+
+           break;
+       }
+       // END IKDREL3KK-5698
         default:
         {
            hddLog(LOGE, "%s: Invalid sub command %d", __func__, sub_cmd);
@@ -7382,6 +7507,13 @@ static int __iw_setnone_getint(struct net_device *dev,
            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, ("concurrency mode=%d"),*value);
            break;
         }
+        // BEGIN MOTOROLA IKJB42MAIN-274, dpn473, 01/02/2013, Add flag to disable/enable MCC mode
+        case WE_GET_MCC_MODE:
+        {
+            *value = (int)hdd_get_mcc_mode();
+            break;
+        }
+        // IKJB42MAIN-274
 
         case WE_GET_NSS:
         {
@@ -7866,9 +7998,13 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
 {
     hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
     hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
-    int *value = (int *)extra;
-    int sub_cmd = value[0];
-    int ret;
+    //BEGIN MOT a19110 IKSWL-15774 Ioctl from Mot code
+    int *value;
+    int sub_cmd, cmd_len;
+    int *tmp_value;
+    int *get_value = NULL;
+    //END IKSWL-15774
+    int ret = 0;
 
     ENTER();
 
@@ -7881,6 +8017,31 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
     ret = wlan_hdd_validate_context(hdd_ctx);
     if (0 != ret)
         return ret;
+
+    //BEGIN MOT a19110 IKSWL-15774 Ioctl from Mot code
+    tmp_value = (int *)extra;
+
+    // Copy from wrqu structure if it was a ioctl from Motorola code
+    if(tmp_value[0] < 0 || (tmp_value[0] >= MAX_SUB_CMD)) {
+        cmd_len = wrqu->data.length;
+        get_value = (int *) kmalloc(cmd_len+1, GFP_KERNEL);  // Motorola, IKHSS7-39028
+
+        if(get_value == NULL)
+            return -ENOMEM;
+
+        if(copy_from_user((char *) get_value, (char*)(wrqu->data.pointer), cmd_len)) {
+            hddLog(VOS_TRACE_LEVEL_FATAL, "%s -- copy_from_user --data pointer failed! bailing",
+                   __FUNCTION__);
+            kfree(get_value);
+            return -EFAULT;
+        }
+
+        value = (int *)get_value;
+    } else {
+        value = (int *)extra;
+    }
+        sub_cmd = value[0];
+    //END IKSWL-15774
 
     switch(sub_cmd) {
 
@@ -7911,6 +8072,11 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
        break;
 
     }
+
+    //BEGIN MOT a19110 IKSWL-15774 Ioctl from Mot code
+    if(get_value != NULL)
+        kfree(get_value);
+    //END IKSWL-15774
     EXIT();
     return ret;
 }
@@ -8382,6 +8548,48 @@ static int __iw_get_char_setnone(struct net_device *dev,
             wrqu->data.length = strlen(extra) + 1;
             break;
         }
+        //BEGIN MOT a19110 IKSWM-20881 Add icotl for get channle list for AP
+        case WE_GET_CHANNELS_FOR_AP:
+        {
+            VOS_STATUS status;
+            v_U8_t i, len;
+            char* buf;
+            uint8_t ubuf[WNI_CFG_COUNTRY_CODE_LEN];
+            uint8_t ubuf_len = WNI_CFG_COUNTRY_CODE_LEN;
+            hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
+            tChannelListInfo channel_list;
+
+            memset(&channel_list, 0, sizeof(channel_list));
+            status = iw_get_channel_list_for_ap(dev, info,wrqu, (char *)&channel_list);
+            if (!VOS_IS_STATUS_SUCCESS(status)) {
+                hddLog(LOGE, FL("GetChannelList Failed!!!"));
+                return -EINVAL;
+            }
+            buf = extra;
+            /**
+             * Maximum channels = WNI_CFG_VALID_CHANNEL_LIST_LEN. Maximum buffer
+             * needed = 5 * number of channels. Check if sufficient
+             * buffer is available and then proceed to fill the buffer
+             */
+            if (WE_MAX_STR_LEN < (5 * WNI_CFG_VALID_CHANNEL_LIST_LEN)) {
+                hddLog(LOGE,FL("Insufficient Buffer to populate channel list"));
+                return -EINVAL;
+            }
+            len = scnprintf(buf, WE_MAX_STR_LEN, "%u ",channel_list.num_channels);
+            if (eHAL_STATUS_SUCCESS == sme_GetCountryCode(hdd_ctx->hHal,ubuf,&ubuf_len)) {
+                /* Printing Country code in getChannelList */
+                for (i = 0; i < (ubuf_len -1); i++)
+                    len += scnprintf(buf + len, WE_MAX_STR_LEN - len, "%c", ubuf[i]);
+            }
+
+            for (i = 0; i < channel_list.num_channels; i++) {
+                len += scnprintf(buf + len, WE_MAX_STR_LEN - len, " %u", channel_list.channels[i]);
+            }
+            wrqu->data.length = strlen(extra) + 1;
+
+            break;
+        }
+        //END IKSWM-20881
         default:
         {
             hddLog(LOGE, "%s: Invalid IOCTL command %d", __func__, sub_cmd );
@@ -8663,8 +8871,8 @@ static int __iw_set_var_ints_getnone(struct net_device *dev,
                         __func__, apps_args[0], apps_args[1], apps_args[2],
                         apps_args[3], apps_args[4]);
                 if (hHal)
-                    return logPrintf(hHal, apps_args[0], apps_args[1],
-                                     apps_args[2], apps_args[3], apps_args[4]);
+                    logPrintf(hHal, apps_args[0], apps_args[1], apps_args[2],
+                            apps_args[3], apps_args[4]);
 
             }
             break;
@@ -9952,12 +10160,11 @@ int wlan_hdd_setIPv6Filter(hdd_context_t *pHddCtx, tANI_U8 filterType,
  * @pAdapter: Adapter context
  * @set: flag to notify set/clear action on the multicast addr
  *
- * Returns: 0 on success, errno on failure
+ * Returns: None
  */
-int wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
+void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
 {
     v_U8_t i;
-    int ret = 0;
     tpSirRcvFltMcAddrList pMulticastAddrs = NULL;
     tHalHandle hHal;
     hdd_context_t* pHddCtx = (hdd_context_t*)pAdapter->pHddCtx;
@@ -9965,26 +10172,26 @@ int wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
 
     ENTER();
 
-    if ((ret = wlan_hdd_validate_context(pHddCtx)))
-        return ret;
+    if (wlan_hdd_validate_context(pHddCtx))
+        return;
 
     hHal = pHddCtx->hHal;
 
     if (NULL == hHal) {
         hddLog(VOS_TRACE_LEVEL_ERROR, FL("HAL Handle is NULL"));
-        return -EINVAL;
+        return;
     }
 
     if (!sta_ctx) {
         hddLog(LOGE, "sta_ctx is NULL");
-        return -EINVAL;
+        return;
     }
 
     if (pHddCtx->cfg_ini->fEnableMCAddrList) {
         pMulticastAddrs = vos_mem_malloc(sizeof(tSirRcvFltMcAddrList));
         if (NULL == pMulticastAddrs) {
             hddLog(VOS_TRACE_LEVEL_ERROR, FL("Could not allocate Memory"));
-            return -ENOMEM;
+            return;
         }
         vos_mem_zero(pMulticastAddrs, sizeof(tSirRcvFltMcAddrList));
         pMulticastAddrs->action = set;
@@ -10057,11 +10264,10 @@ int wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
     } else {
         hddLog(VOS_TRACE_LEVEL_INFO,
                 FL("gMCAddrListEnable is not enabled in INI"));
-        return -EINVAL;
     }
 
     EXIT();
-    return ret;
+    return;
 }
 
 static int __iw_set_packet_filter_params(struct net_device *dev,
@@ -11060,7 +11266,7 @@ static int __iw_set_two_ints_getnone(struct net_device *dev,
             tCsrRoamProfile roam_profile;
 
             hddLog(LOG1, "Set monitor mode Channel %d", value[1]);
-            hdd_select_mon_cbmode(pAdapter, value[1], &vht_channel_width);
+            hdd_select_cbmode(pAdapter, value[1], &vht_channel_width);
             roam_profile.ChannelInfo.ChannelList = &ch_info->channel;
             roam_profile.ChannelInfo.numOfChannels = 1;
             roam_profile.vht_channel_width = ch_info->channel_width;
@@ -11630,6 +11836,13 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         0, "erx_dri_sample" },
 
+    //BEGIN MOT a19110 IKDREL3KK-5698
+    {   WE_SET_CHANNEL_RANGE,
+        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+        0,
+        "setChannelRange" },
+    //END IKDREL3KK-5698
+
     {   WLAN_PRIV_SET_NONE_GET_INT,
         0,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
@@ -11679,6 +11892,12 @@ static const struct iw_priv_args we_private_args[] = {
         0,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         "getconcurrency" },
+
+    /* MOTOROLA IKJB42MAIN-274 */
+    {   WE_GET_MCC_MODE,
+         0,
+         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+         "getMccMode" },
 
     {   WE_GET_NSS,
         0,
@@ -12062,6 +12281,12 @@ static const struct iw_priv_args we_private_args[] = {
         0,
         IW_PRIV_TYPE_CHAR| WE_MAX_STR_LEN,
         "getSNR" },
+    //BEGIN MOT a19110 IKSWM-20881 Support ioctl for get channel list for AP
+    {   WE_GET_CHANNELS_FOR_AP,
+        0,
+        IW_PRIV_TYPE_CHAR| WE_MAX_STR_LEN,
+        "getChnlsForAp" },
+    //END IKSWM-20881
 
     /* handlers for main ioctl */
     {   WLAN_PRIV_SET_NONE_GET_NONE,

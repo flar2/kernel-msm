@@ -159,7 +159,7 @@ DEFINE_EVENT(gb_host_device, gb_host_device_recv,
 
 /* This part must be outside protection */
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH ../../../../drivers/misc/motomods/greybus
+#define TRACE_INCLUDE_PATH .
 
 /*
  * TRACE_INCLUDE_FILE is not needed if the filename and TRACE_SYSTEM are equal

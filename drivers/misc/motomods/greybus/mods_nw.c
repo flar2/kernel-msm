@@ -27,7 +27,6 @@
 
 #include "greybus.h"
 #include "muc_svc.h"
-#include "muc_attach.h"
 #include "mods_nw.h"
 #include "mods_trace.h"
 
@@ -337,6 +336,8 @@ int mods_nw_switch(struct mods_dl_device *from, uint8_t *msg, size_t len)
 out:
 	return err;
 }
+EXPORT_SYMBOL(mods_nw_switch);
+
 static void _set_filter(uint8_t protocol, bool value)
 {
 	struct radix_tree_iter rt_iter;

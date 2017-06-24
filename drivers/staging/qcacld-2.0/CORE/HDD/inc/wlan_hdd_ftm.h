@@ -38,6 +38,10 @@
 #define WLAN_FTM_SUCCESS   0
 #define WLAN_FTM_FAILURE   1
 
+//A TLV stream contains a 28-byte stream header, and its payload. It represents
+//a command from host or a response from target.
+#define WLAN_FTM_OPCODE 28
+
 typedef enum {
     WLAN_FTM_INITIALIZED,
     WLAN_FTM_STOPPED,
@@ -58,6 +62,7 @@ int wlan_hdd_ftm_open(hdd_context_t *pHddCtx);
 int wlan_hdd_ftm_close(hdd_context_t *pHddCtx);
 
 #if  defined(QCA_WIFI_FTM)
+VOS_STATUS vos_is_tcmd_data_white_listed(u_int8_t *data, int len);
 VOS_STATUS wlan_hdd_ftm_testmode_cmd(void *data, int len, boolean from_qcmbr);
 int wlan_hdd_qcmbr_unified_ioctl(hdd_adapter_t *pAdapter, struct ifreq *ifr);
 VOS_STATUS hdd_ftm_start(hdd_context_t *pHddCtx);

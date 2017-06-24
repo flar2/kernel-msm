@@ -1119,6 +1119,15 @@ VOS_STATUS wlan_hdd_ftm_testmode_cmd(void *data, int len, boolean from_qcmbr)
 {
     struct ar6k_testmode_cmd_data *cmd_data;
 
+#ifdef WLAN_WHITE_LIST
+    //Check if the tcmd data for the FTM access is whitelisted
+    if (vos_is_tcmd_data_white_listed(data, len) != VOS_STATUS_SUCCESS) {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                                     ("No permission to execute FTM command"));
+        return VOS_STATUS_E_PERM;
+    }
+#endif
+
     cmd_data = (struct ar6k_testmode_cmd_data *)
                vos_mem_malloc(sizeof(*cmd_data));
 
@@ -1151,5 +1160,30 @@ VOS_STATUS wlan_hdd_ftm_testmode_cmd(void *data, int len, boolean from_qcmbr)
    }
 
    return VOS_STATUS_SUCCESS;
+}
+
+//Function to check the data, and confirm if its whitelisted.
+//05 00 00 00 - ID
+//01 00 00 00 - version
+//00 00 00 00 - header
+//28 00 00 00 - length
+//24 FD 00 00 - checksum
+//00 00 00 00 - headerDepValue
+//00 00 00 00 - headerExtended
+//above raw data needs to be parsed, and to be reached for the
+//Tx opcode.
+//01 00 00 00  --- > Tx opcode is 4 bytes and value is 1.
+//dats recived to the wlandriver starts for the TLV Stream Header
+//Whose value is for 28 bytes, the first byte is 5 (fixed)
+VOS_STATUS vos_is_tcmd_data_white_listed(u_int8_t *data, int len)
+{
+       //_OP_TX = Tx command
+       u_int8_t whitelist_read_tx[]   = {0x01, 0x00, 0x00, 0x00};
+
+       if ((vos_mem_compare((data + WLAN_FTM_OPCODE), whitelist_read_tx,
+                                      sizeof(whitelist_read_tx)) == VOS_TRUE)) {
+           return VOS_STATUS_SUCCESS;
+       }
+       return VOS_STATUS_E_PERM;
 }
 #endif /*QCA_WIFI_FTM*/

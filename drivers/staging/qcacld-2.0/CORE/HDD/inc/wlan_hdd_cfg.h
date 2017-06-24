@@ -2198,7 +2198,7 @@ typedef enum
 #define CFG_TDLS_EXTERNAL_CONTROL                   "gTDLSExternalControl"
 #define CFG_TDLS_EXTERNAL_CONTROL_MIN               (0)
 #define CFG_TDLS_EXTERNAL_CONTROL_MAX               (1)
-#define CFG_TDLS_EXTERNAL_CONTROL_DEFAULT           (1)
+#define CFG_TDLS_EXTERNAL_CONTROL_DEFAULT           (0)
 
 #define CFG_TDLS_OFF_CHANNEL_SUPPORT_ENABLE          "gEnableTDLSOffChannel"
 #define CFG_TDLS_OFF_CHANNEL_SUPPORT_ENABLE_MIN      (0)
@@ -3995,15 +3995,6 @@ enum dot11p_mode {
 #define CFG_SIFS_BURST_DURATION_MAX      (12)
 #define CFG_SIFS_BURST_DURATION_DEFAULT  (8)
 
-/*
- * 0: Disable BPF packet filter
- * 1: Enable BPF packet filter
- */
-#define CFG_BPF_PACKET_FILTER_OFFLOAD           "gBpfFilterEnable"
-#define CFG_BPF_PACKET_FILTER_OFFLOAD_MIN       (0)
-#define CFG_BPF_PACKET_FILTER_OFFLOAD_MAX       (1)
-#define CFG_BPF_PACKET_FILTER_OFFLOAD_DEFAULT   (1)
-
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -4787,8 +4778,6 @@ struct hdd_config {
    bool                        active_mode_offload;
    /* parameter for indicating sifs burst duration to fw */
    uint8_t                     sifs_burst_duration;
-
-   bool bpf_packet_filter_enable;
 };
 
 typedef struct hdd_config hdd_config_t;
@@ -4907,6 +4896,9 @@ static __inline unsigned long utilMin( unsigned long a, unsigned long b )
   -------------------------------------------------------------------------*/
 VOS_STATUS hdd_parse_config_ini(hdd_context_t *pHddCtx);
 VOS_STATUS hdd_update_mac_config(hdd_context_t *pHddCtx);
+VOS_STATUS hdd_generate_random_mac_from_serialno(char *serialNo,
+                                            int serialength, char *computedMac);
+VOS_STATUS hdd_update_mac_serial(hdd_context_t *pHddCtx);
 VOS_STATUS hdd_set_sme_config( hdd_context_t *pHddCtx );
 VOS_STATUS hdd_set_sme_chan_list(hdd_context_t *hdd_ctx);
 v_BOOL_t hdd_update_config_dat ( hdd_context_t *pHddCtx );

@@ -270,6 +270,158 @@ struct gb_battery_current_now_response {
 	__le32	current_now;
 } __packed;
 
+/* PTP */
+
+/* Version of the Greybus ptp protocol we support */
+#define GB_PTP_VERSION_MAJOR		0x00
+#define GB_PTP_VERSION_MINOR		0x03
+
+/* Greybus ptp operation types */
+#define GB_PTP_TYPE_GET_FUNCTIONALITY		0x02
+#define GB_PTP_TYPE_SET_CURRENT_FLOW		0x03
+#define GB_PTP_TYPE_SET_MAX_INPUT_CURRENT	0x04
+#define GB_PTP_TYPE_EXT_POWER_CHANGED		0x05
+#define GB_PTP_TYPE_EXT_POWER_PRESENT		0x06
+#define GB_PTP_TYPE_POWER_REQUIRED_CHANGED	0x07
+#define GB_PTP_TYPE_POWER_REQUIRED		0x08
+#define GB_PTP_TYPE_POWER_AVAILABLE_CHANGED	0x09 /* added in ver 00.02 */
+#define GB_PTP_TYPE_POWER_AVAILABLE		0x0A /* added in ver 00.02 */
+#define GB_PTP_TYPE_POWER_SOURCE		0x0B /* added in ver 00.02 */
+#define GB_PTP_TYPE_GET_MAX_OUTPUT_CURRENT	0x0C /* added in ver 00.02 */
+#define GB_PTP_TYPE_GET_CURRENT_FLOW		0x0D /* added in ver 00.03 */
+#define GB_PTP_TYPE_SET_MAX_OUTPUT_VOLTAGE	0x0E /* added in ver 00.03 */
+#define GB_PTP_TYPE_GET_OUTPUT_VOLTAGE		0x0F /* added in ver 00.03 */
+#define GB_PTP_TYPE_GET_MAX_INPUT_VOLTAGE	0x10 /* added in ver 00.03 */
+#define GB_PTP_TYPE_SET_INPUT_VOLTAGE		0x11 /* added in ver 00.03 */
+
+/* Check for operation support */
+#define GB_PTP_SUPPORTS(p, name) \
+	((p->connection->module_major > GB_PTP_SUPPORT_##name##_MAJOR) || \
+	(p->connection->module_major == GB_PTP_SUPPORT_##name##_MAJOR && \
+	p->connection->module_minor >= GB_PTP_SUPPORT_##name##_MINOR))
+
+/* Operations added in ver 00.02 */
+#define GB_PTP_SUPPORT_POWER_AVAILABLE_CHANGED_MAJOR	0x00
+#define GB_PTP_SUPPORT_POWER_AVAILABLE_CHANGED_MINOR	0x02
+#define GB_PTP_SUPPORT_POWER_AVAILABLE_MAJOR		0x00
+#define GB_PTP_SUPPORT_POWER_AVAILABLE_MINOR		0x02
+#define GB_PTP_SUPPORT_POWER_SOURCE_MAJOR		0x00
+#define GB_PTP_SUPPORT_POWER_SOURCE_MINOR		0x02
+#define GB_PTP_SUPPORT_MAX_OUTPUT_CURRENT_MAJOR		0x00
+#define GB_PTP_SUPPORT_MAX_OUTPUT_CURRENT_MINOR		0x02
+
+/* Operations added in ver 00.03 */
+#define GB_PTP_SUPPORT_GET_CURRENT_FLOW_MAJOR		0x00
+#define GB_PTP_SUPPORT_GET_CURRENT_FLOW_MINOR		0x03
+#define GB_PTP_SUPPORT_SET_MAX_OUTPUT_VOLTAGE_MAJOR	0x00
+#define GB_PTP_SUPPORT_SET_MAX_OUTPUT_VOLTAGE_MINOR	0x03
+#define GB_PTP_SUPPORT_GET_OUTPUT_VOLTAGE_MAJOR		0x00
+#define GB_PTP_SUPPORT_GET_OUTPUT_VOLTAGE_MINOR		0x03
+#define GB_PTP_SUPPORT_GET_MAX_INPUT_VOLTAGE_MAJOR	0x00
+#define GB_PTP_SUPPORT_GET_MAX_INPUT_VOLTAGE_MINOR	0x03
+#define GB_PTP_SUPPORT_SET_INPUT_VOLTAGE_MAJOR		0x00
+#define GB_PTP_SUPPORT_SET_INPUT_VOLTAGE_MINOR		0x03
+
+/* Mod internal source send power capabilities */
+#define GB_PTP_INT_SND_NEVER		0x00
+#define GB_PTP_INT_SND_SUPPLEMENTAL	0x01
+#define GB_PTP_INT_SND_LOW_BATT_SAVER	0x02
+
+/* Mod internal source receive power capabilities */
+#define GB_PTP_INT_RCV_NEVER		0x00
+#define GB_PTP_INT_RCV_FIRST		0x01
+#define GB_PTP_INT_RCV_SECOND		0x02
+#define GB_PTP_INT_RCV_PARALLEL		0x03
+
+/* Mod external source capabilities */
+#define GB_PTP_EXT_NONE			0x00
+#define GB_PTP_EXT_SUPPORTED		0x01
+
+/* Current Flow Request from Phone to Mod */
+#define GB_PTP_CURRENT_OFF		0x00
+#define GB_PTP_CURRENT_TO_MOD		0x01
+#define GB_PTP_CURRENT_FROM_MOD		0x02
+
+/* Mod External Power Presence */
+#define GB_PTP_EXT_POWER_NOT_PRESENT		0x00
+#define GP_PTP_EXT_POWER_PRESENT		0x01 /* removed in ver 00.02 */
+#define GB_PTP_EXT_POWER_WIRELESS_PRESENT	0x02 /* added in ver 00.02 */
+#define GB_PTP_EXT_POWER_WIRED_PRESENT		0x03 /* added in ver 00.02 */
+#define GB_PTP_EXT_POWER_WIRED_WIRELESS_PRESENT	0x04 /* added in ver 00.02 */
+
+/* Mod internal source power requirements */
+#define GB_PTP_POWER_NOT_REQUIRED	0x00
+#define GB_PTP_POWER_REQUIRED		0x01
+
+/* Mod power availability for Phone */
+#define GB_PTP_POWER_NOT_AVAILABLE	0x00
+#define GB_PTP_POWER_AVAILABLE_EXT	0x01
+#define GB_PTP_POWER_AVAILABLE_INT	0x02
+
+/* Mod power source supplying current to Phone*/
+#define GB_PTP_POWER_SOURCE_NONE	0x00
+#define GB_PTP_POWER_SOURCE_BATTERY	0x01
+#define GB_PTP_POWER_SOURCE_WIRED	0x02
+#define GB_PTP_POWER_SOURCE_WIRELESS	0x03
+
+/* Mod that does not support variable voltage charging */
+#define GB_PTP_VARIABLE_VOLTAGE_NOT_SUPPORTED	5000000		/* uV */
+
+/* Greybus messages */
+struct gb_ptp_functionality_response {
+	__u8 int_snd;
+	__u8 int_rcv;
+	__le32 unused;
+	__u8 ext;
+} __packed;
+
+struct gb_ptp_max_output_current_response {
+	__le32 curr;
+} __packed;
+
+struct gb_ptp_ext_power_present_response {
+	__u8 present;
+} __packed;
+
+struct gb_ptp_power_required_response {
+	__u8 required;
+} __packed;
+
+struct gb_ptp_power_available_response {
+	__u8 available;
+} __packed;
+
+struct gb_ptp_power_source_response {
+	__u8 source;
+} __packed;
+
+struct gb_ptp_current_flow_request {
+	__u8 direction;
+} __packed;
+
+struct gb_ptp_current_flow_response {
+	__u8 direction;
+} __packed;
+
+struct gb_ptp_max_input_current_request {
+	__le32 curr;
+} __packed;
+
+struct gb_ptp_max_output_voltage_request {
+	__le32 voltage;
+} __packed;
+
+struct gb_ptp_output_voltage_response {
+	__le32 voltage;
+} __packed;
+
+struct gb_ptp_max_input_voltage_response {
+	__le32 voltage;
+} __packed;
+
+struct gb_ptp_input_voltage_request {
+	__le32 voltage;
+} __packed;
 
 /* HID */
 
@@ -527,6 +679,15 @@ struct gb_pwm_disable_request {
 } __packed;
 
 /* I2S */
+#define GB_I2S_MGMT_VERSION_MAJOR 0
+#define GB_I2S_MGMT_VERSION_MINOR 3
+
+#define GB_I2S_MGMT_VERSION_CFG_MASK_MAJOR 0
+#define GB_I2S_MGMT_VERSION_CFG_MASK_MINOR 2
+
+#define GB_I2S_MGMT_VERSION_START_MSG_MAJOR 0
+#define GB_I2S_MGMT_VERSION_START_MSG_MINOR 3
+
 #define GB_I2S_MGMT_TYPE_PROTOCOL_VERSION               0x01
 #define GB_I2S_MGMT_TYPE_GET_SUPPORTED_CONFIGURATIONS	0x02
 #define GB_I2S_MGMT_TYPE_SET_CONFIGURATION		0x03
@@ -721,6 +882,15 @@ struct gb_i2s_mgmt_stop_request {
 /* stop response has no payload */
 
 /* Mods Audio protocol*/
+
+#define GB_MODS_AUDIO_VERSION_MAJOR 0
+#define GB_MODS_AUDIO_VERSION_MINOR 3
+
+#define GB_MODS_AUDIO_VERSION_SPKR_PRESET_MAJOR 0
+#define GB_MODS_AUDIO_VERSION_SPKR_PRESET_MINOR 2
+
+#define GB_MODS_AUDIO_VERSION_BF_PARAMS_MAJOR 0
+#define GB_MODS_AUDIO_VERSION_BF_PARAMS_MINOR 3
 
 /* Commands */
 #define GB_AUDIO_GET_VOLUME_DB_RANGE		0x02
@@ -1597,6 +1767,281 @@ struct gb_lights_get_flash_fault_response {
 #define GB_LIGHTS_FLASH_FAULT_INPUT_VOLTAGE		0x00000040
 #define GB_LIGHTS_FLASH_FAULT_LED_OVER_TEMPERATURE	0x00000080
 } __packed;
+
+/* Vendor */
+
+#define GB_VENDOR_MOTO_VERSION_MAJOR		0x00
+#define GB_VENDOR_MOTO_VERSION_MINOR		0x03
+
+/* Greybus Motorola vendor specific request types */
+#define GB_VENDOR_MOTO_TYPE_GET_DMESG		0x02
+#define GB_VENDOR_MOTO_TYPE_GET_LAST_DMESG	0x03
+#define GB_VENDOR_MOTO_TYPE_GET_PWR_UP_REASON	0x04
+#define GB_VENDOR_MOTO_TYPE_GET_DMESG_SIZE	0x05
+#define GB_VENDOR_MOTO_TYPE_GET_UPTIME		0x06
+
+#define GB_VENDOR_MOTO_DEFAULT_DMESG_SIZE   1000
+#define GB_VENDOR_MOTO_VER_DMESG_SIZE       2
+#define GB_VENDOR_MOTO_VER_UPTIME           3
+
+/* power up reason request has no payload */
+struct gb_vendor_moto_pwr_up_reason_response {
+	__le32 reason;
+} __packed;
+
+/* get dmesg size request has no payload */
+struct gb_vendor_moto_get_dmesg_size_resp {
+	__le16 size;
+} __packed;
+
+struct gb_vendor_moto_get_uptime_response {
+	__le32 secs;
+} __packed;
+
+/* DISPLAY */
+
+/* Version of the Greybus display protocol we support */
+#define	GB_DISPLAY_VERSION_MAJOR		0x00
+#define	GB_DISPLAY_VERSION_MINOR		0x02
+
+/* Greybus Display operation types */
+#define	GB_DISPLAY_HOST_READY			0x02
+#define	GB_DISPLAY_GET_CONFIG_SIZE		0x03
+#define	GB_DISPLAY_GET_CONFIG			0x04
+#define	GB_DISPLAY_SET_CONFIG			0x05
+#define	GB_DISPLAY_GET_STATE			0x06
+#define	GB_DISPLAY_SET_STATE			0x07
+#define	GB_DISPLAY_NOTIFICATION			0x08
+
+#define GB_DISPLAY_STATE_OFF			0x00
+#define GB_DISPLAY_STATE_ON			0x01
+
+#define GB_DISPLAY_NOTIFY_INVALID		0x00
+#define GB_DISPLAY_NOTIFY_FAILURE		0x01
+#define GB_DISPLAY_NOTIFY_AVAILABLE		0x02
+#define GB_DISPLAY_NOTIFY_UNAVAILABLE		0x03
+#define GB_DISPLAY_NOTIFY_CONNECT		0x04
+#define GB_DISPLAY_NOTIFY_DISCONNECT		0x05
+#define GB_DISPLAY_NOTIFY_NUM_EVENTS		0x06
+
+/* get display config size request has no payload */
+struct gb_display_get_display_config_size_response {
+	__le32	size;
+} __packed;
+
+/* get display config request has no payload */
+struct gb_display_get_display_config_response {
+	__u8	display_type;
+	__u8	config_type;
+	__u8	reserved[2];
+	__u8	data[0];
+} __packed;
+
+struct gb_display_set_display_config_request {
+	__u8	index;
+} __packed;
+/* set display config has no response */
+
+/* get display config request has no payload */
+struct gb_display_get_display_state_response {
+	__u8	state;
+} __packed;
+
+struct gb_display_set_display_state_request {
+	__u8	state;
+} __packed;
+/* set display state has no response */
+
+
+/* USB-EXT */
+
+#define GB_USB_EXT_VERSION_MAJOR     0x00
+#define GB_USB_EXT_VERSION_MINOR     0x01
+
+#define GB_USB_EXT_TYPE_READY        0x02
+#define GB_USB_EXT_TYPE_ATTACH_STATE 0x03
+
+#define GB_USB_EXT_PROTOCOL_2_0      0x00
+#define GB_USB_EXT_PROTOCOL_3_1      0x01
+
+#define GB_USB_EXT_PATH_ENTERPRISE   0x00
+#define GB_USB_EXT_PATH_BRIDGE       0x01
+
+#define GB_USB_EXT_REMOTE_DEVICE     0x00
+#define GB_USB_EXT_REMOTE_HOST       0x01
+
+struct gb_usb_ext_attach_request {
+	__u8 active;        /* attach or detach */
+	__u8 protocol;      /* 2.0 or 3.1 */
+	__u8 path;          /* tsb bridge or shared dp/usb */
+	__u8 remote_type;   /* host or device */
+} __packed;
+
+/* no data for gb_usb_ext_attach_response */
+
+/* SENSORS EXT */
+
+/* Version of the Greybus protocol we support */
+#define	GB_SENSORS_EXT_VERSION_MAJOR		0x00
+#define	GB_SENSORS_EXT_VERSION_MINOR		0x02
+
+/* Greybus Motorola vendor specific request types */
+#define GB_SENSORS_EXT_TYPE_SENSOR_COUNT	0x02
+#define GB_SENSORS_EXT_TYPE_SENSOR_INFO		0x03
+#define GB_SENSORS_EXT_TYPE_START_REPORTING	0x04
+#define GB_SENSORS_EXT_TYPE_FLUSH		0x05
+#define GB_SENSORS_EXT_TYPE_STOP_REPORTING	0x06
+#define GB_SENSORS_EXT_TYPE_EVENT		0x07
+
+/* get count of sensors in module */
+struct gb_sensors_get_sensor_count_response {
+	__u8	sensors_count;
+} __packed;
+
+struct gb_sensors_ext_sensor_info_request {
+	__u8	sensor_id;
+} __packed;
+/* sensor info response structure is gb_sensor */
+
+/* this request has no response payload */
+struct gb_sensors_ext_start_reporting_request {
+	__u8	sensor_id;
+	__u8	reserved[3];
+	__le64	sampling_period;
+	__le64	max_report_latency;
+} __packed;
+
+/* this request has no response payload */
+struct gb_sensors_ext_flush_request {
+	__u8	sensor_id;
+} __packed;
+
+struct gb_sensors_ext_report_data {
+	__u8	sensor_id;
+	__u8	flags;
+	__le16	readings;
+	__le64	reference_time;
+	__u8	reading[];
+} __packed;
+
+struct gb_sensors_ext_report_hdr {
+	__u8	reporting_sensors_count;
+	__u8	reserved;
+	struct gb_sensors_ext_report_data sensor[];
+} __packed;
+
+
+/* this request has no response payload */
+struct gb_sensors_ext_stop_reporting_request {
+	__u8	sensor_id;
+} __packed;
+
+/* CAMERA EXT */
+
+/* Version of the Greybus camera protocol we support */
+#define GB_CAMERA_EXT_VERSION_MAJOR 0x01
+#define GB_CAMERA_EXT_VERSION_MINOR 0x01
+
+/* Used to indicate enum index is not found */
+#define GB_CAMERA_EXT_INVALID_INDEX cpu_to_le32(0xFFFFFFFF)
+
+/* Greybus camera request types */
+#define GB_CAMERA_EXT_TYPE_INVALID		0x00
+#define GB_CAMERA_EXT_TYPE_PROTOCOL_VERSION	0x01
+
+#define GB_CAMERA_EXT_TYPE_POWER_ON		0x02
+#define GB_CAMERA_EXT_TYPE_POWER_OFF		0x03
+
+#define GB_CAMERA_EXT_TYPE_INPUT_ENUM		0x04
+#define GB_CAMERA_EXT_TYPE_INPUT_GET		0x05
+#define GB_CAMERA_EXT_TYPE_INPUT_SET		0x06
+
+#define GB_CAMERA_EXT_TYPE_FMT_ENUM		0x07
+#define GB_CAMERA_EXT_TYPE_FMT_GET		0x08
+#define GB_CAMERA_EXT_TYPE_FMT_SET		0x09
+
+#define GB_CAMERA_EXT_TYPE_FMSIZE_ENUM		0x0A
+#define GB_CAMERA_EXT_TYPE_FRMIVAL_ENUM		0x0B
+
+#define GB_CAMERA_EXT_TYPE_STREAM_ON		0x0C
+#define GB_CAMERA_EXT_TYPE_STREAM_OFF		0x0D
+
+#define GB_CAMERA_EXT_TYPE_STREAM_PARM_SET	0x0E
+#define GB_CAMERA_EXT_TYPE_STREAM_PARM_GET	0x0F
+
+#define GB_CAMERA_EXT_TYPE_CTRL_GET_CFG		0x10
+
+#define GB_CAMERA_EXT_TYPE_CTRL_GET		0x11
+#define GB_CAMERA_EXT_TYPE_CTRL_SET		0x12
+#define GB_CAMERA_EXT_TYPE_CTRL_TRY		0x13
+
+#define GB_CAMERA_EXT_ASYNC_MESSAGE		0x14
+
+struct camera_ext_predefined_ctrl_mod_req {
+	/* Phone access MOD control by index (0, 1, ...).
+	 */
+	__le32 idx;
+	/* required response size
+	 * Expected responding config data size (including header) for
+	 * GB_CAMERA_EXT_TYPE_CTRL_GET_CFG.
+	 * Expected control value size for GB_CAMERA_EXT_TYPE_CTRL_GET.
+	 * Size of control value to set/try for GB_CAMERA_EXT_TYPE_CTRL_SET/TRY.
+	 */
+	__le32 data_size;
+	/* control value to set for GB_CAMERA_EXT_TYPE_CTRL_SET/TRY
+	 */
+	uint8_t data[0];
+};
+
+/* max control value size */
+#define CAMERA_EXT_CTRL_MAX_VAL_SIZE (16 * 1024)
+
+/* next available control info (to calc expected gb response size) */
+struct camera_ext_ctrl_size_info {
+	/* id, -1 if no more */
+	__le32 id;
+	/* if control has menu/dims from MOD, indicating the array
+	 * item number
+	 */
+	__le32 array_size;
+	/* control's value size.  */
+	__le32 val_size;
+} __packed;
+
+/* ctrl config from MOD, playload is decided by
+ * CAMERA_EXT_CTRL_FLAG_NEED_XXX. MOD side must provide all fields
+ * each field is tagged by its NEED_XXX flag.
+ */
+struct camera_ext_predefined_ctrl_mod_cfg {
+	/* control id at position idx (camera_ext_predefined_ctrl_mod_req) */
+	__le32 id;
+	struct camera_ext_ctrl_size_info next;
+	/* FLAG0 DATA0 FLAG1 DATA1 ... */
+	uint8_t data[0];
+} __packed;
+
+/* event send from MOD to AP */
+struct camera_ext_event_hdr {
+	__le32 type;
+	uint8_t data[0];
+} __packed;
+
+struct camera_ext_event_error {
+	__le32 error_code;
+} __packed;
+
+/* use 1024 as metadata length*/
+#define CAMERA_EXT_EVENT_METADATA_DESC_LEN 1024
+
+struct camera_ext_event_metadata {
+	char desc[CAMERA_EXT_EVENT_METADATA_DESC_LEN];
+} __packed;
+
+/* open mode hint value sent along with power up request */
+#define CAMERA_EXT_BOOTMODE_NORMAL	0
+#define CAMERA_EXT_BOOTMODE_PREVIEW	1
+#define CAMERA_EXT_BOOTMODE_DFU		2
+#define CAMERA_EXT_BOOTMODE_MAX		3
 
 #endif /* __GREYBUS_PROTOCOLS_H */
 

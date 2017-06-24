@@ -26,6 +26,8 @@
 #include "muc.h"
 
 static BLOCKING_NOTIFIER_HEAD(muc_attach_chain_head);
+static BLOCKING_NOTIFIER_HEAD(muc_reset_chain_head);
+
 static void do_muc_ff_reset(struct work_struct *work);
 static int muc_pinctrl_select_state_con(struct muc_data *cdata);
 
@@ -43,7 +45,7 @@ static int muc_attach_notifier_call_chain(unsigned long val)
 		cd->intr_count = 0;
 	}
 
-	ret  = blocking_notifier_call_chain(&muc_attach_chain_head,
+	ret = blocking_notifier_call_chain(&muc_attach_chain_head,
 			val, NULL);
 	return notifier_to_errno(ret);
 }
@@ -74,6 +76,31 @@ int unregister_muc_attach_notifier(struct notifier_block *nb)
 	return blocking_notifier_chain_unregister(&muc_attach_chain_head, nb);
 }
 EXPORT_SYMBOL(unregister_muc_attach_notifier);
+
+static int muc_reset_notifier_call_chain(void)
+{
+	int ret;
+
+	ret = blocking_notifier_call_chain(&muc_reset_chain_head, 0, NULL);
+
+	return notifier_to_errno(ret);
+}
+
+int register_muc_reset_notifier(struct notifier_block *nb)
+{
+	pr_debug("%s <- %pS\n", __func__, __builtin_return_address(0));
+
+	return blocking_notifier_chain_register(&muc_reset_chain_head, nb);
+}
+EXPORT_SYMBOL(register_muc_reset_notifier);
+
+int unregister_muc_reset_notifier(struct notifier_block *nb)
+{
+	pr_debug("%s <- %pS\n", __func__, __builtin_return_address(0));
+
+	return blocking_notifier_chain_unregister(&muc_reset_chain_head, nb);
+}
+EXPORT_SYMBOL(unregister_muc_reset_notifier);
 
 static void muc_seq(struct muc_data *cdata, u32 seq[], size_t seq_len)
 {
@@ -308,13 +335,14 @@ static void attach_work(struct work_struct *work)
 static DEFINE_RATELIMIT_STATE(bpf_rate_state, HZ, 1);
 static irqreturn_t muc_bplus_fault(int irq, void *data)
 {
+	struct muc_data *cdata = data;
 	int level;
 
-	level = gpio_get_value(muc_misc_data->gpios[MUC_GPIO_BPLUS_FAULT_N]);
+	level = gpio_get_value(cdata->gpios[MUC_GPIO_BPLUS_FAULT_N]);
 
 	/* Accounting and logging when asserted only */
 	if (!level) {
-		muc_misc_data->bplus_fault_cnt++;
+		cdata->bplus_fault_cnt++;
 
 		if (__ratelimit(&bpf_rate_state))
 			muc_send_uevent("MOD_ERROR=BPLUS_FAULT_DETECTED");
@@ -335,7 +363,7 @@ static irqreturn_t muc_isr(int irq, void *data)
 	if (cdata->bplus_state == MUC_BPLUS_TRANSITIONING)
 		return IRQ_HANDLED;
 
-	muc_misc_data->intr_count++;
+	cdata->intr_count++;
 
 	pr_debug("%s: detected: %d previous state: %d\n",
 			__func__, det, cdata->muc_detected);
@@ -844,6 +872,8 @@ static void do_muc_ff_reset(struct work_struct *work)
 	} else
 		cd->bplus_state = MUC_BPLUS_ENABLED;
 
+	muc_reset_notifier_call_chain();
+
 	/* Lets wait for the device to be re-detected */
 	det_timeout = jiffies + DET_TIMEOUT_JIFFIES;
 	while (gpio_get_value(cd->gpios[MUC_GPIO_DET_N]) &&
@@ -952,6 +982,8 @@ static void do_muc_soft_reset(struct work_struct *work)
 	pinctrl_select_state(cd->pinctrl, cd->pins_discon);
 	muc_seq(cd, cd->dis_seq, cd->dis_seq_len);
 	cd->bplus_state = MUC_BPLUS_DISABLED;
+
+	muc_reset_notifier_call_chain();
 
 	muc_handle_detection(false);
 

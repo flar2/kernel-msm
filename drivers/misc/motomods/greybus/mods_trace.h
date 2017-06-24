@@ -60,7 +60,7 @@ TRACE_EVENT(mods_switch,
 #endif /* _TRACE_MODS_H */
 
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH ../../../../drivers/misc/motomods/greybus
+#define TRACE_INCLUDE_PATH .
 
 #undef TRACE_INCLUDE_FILE
 #define TRACE_INCLUDE_FILE mods_trace
