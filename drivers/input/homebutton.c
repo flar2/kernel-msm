@@ -30,6 +30,7 @@ struct homebutton_data {
 	bool key_press;
 	bool scr_suspended;
 	bool enable;
+	bool enable_off;
 	bool haptic;
 	unsigned int key;
 	unsigned int key_left;
@@ -41,6 +42,7 @@ struct homebutton_data {
 	unsigned int current_key;
 } hb_data = {
 	.enable = true,
+	.enable_off = false,
 	.haptic = false,
 	.key = KEY_RESERVED,
 	.key_hold = KEY_RESERVED,
@@ -119,9 +121,12 @@ static bool hb_input_filter(struct input_handle *handle, unsigned int type,
 		return false;
 	}
 
-	if (!hb_data.enable || hb_data.scr_suspended) {
+	if (!hb_data.enable) {
 		return false;
 	}
+	
+	if (hb_data.scr_suspended && !hb_data.enable_off)
+		return false;
 	
 	if (value == 1)
 		hb_data.key_press = true;
@@ -233,6 +238,34 @@ static ssize_t hb_enable_store(struct device *dev,
 
 static DEVICE_ATTR(enable, (S_IWUSR | S_IRUGO),
 	hb_enable_show, hb_enable_store);
+
+static ssize_t hb_enable_off_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", hb_data.enable_off);
+}
+
+static ssize_t hb_enable_off_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int rc;
+	unsigned long input;
+
+	rc = kstrtoul(buf, 0, &input);
+	if (rc < 0)
+		return -EINVAL;
+
+	if (input < 0 || input > 1)
+		input = 0;
+
+	hb_data.enable_off = input;
+
+	return count;
+}
+
+static DEVICE_ATTR(enable_off, (S_IWUSR | S_IRUGO),
+	hb_enable_off_show, hb_enable_off_store);
+
 
 static ssize_t key_show(struct device *dev,
 		 struct device_attribute *attr, char *buf)
@@ -453,6 +486,9 @@ static int __init hb_init(void)
 	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_BACK);
 	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_VOLUMEDOWN);
 	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_VOLUMEUP);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_PLAYPAUSE);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_PREVIOUSSONG);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_NEXTSONG);
 	set_bit(EV_KEY, hb_data.hb_dev->evbit);
 	set_bit(KEY_HOME, hb_data.hb_dev->keybit);
 	hb_data.hb_dev->name = "qwerty";
@@ -521,6 +557,10 @@ static int __init hb_init(void)
 	rc = sysfs_create_file(hb_data.homebutton_kobj, &dev_attr_haptic.attr);
 	if (rc)
 		pr_err("%s: sysfs_create_file failed for homebutton haptic key\n", __func__);
+
+	rc = sysfs_create_file(hb_data.homebutton_kobj, &dev_attr_enable_off.attr);
+	if (rc)
+		pr_err("%s: sysfs_create_file failed for homebutton screen off key\n", __func__);
 
 err_input_dev:
 	input_free_device(hb_data.hb_dev);

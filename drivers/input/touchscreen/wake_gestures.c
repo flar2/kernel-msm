@@ -69,6 +69,11 @@
 #define SWEEP_DOWN		0x08
 #define VIB_STRENGTH 		30
 
+#define KEY_GESTURE_SWIPE_RIGHT		KEY_F5
+#define KEY_GESTURE_SWIPE_LEFT		KEY_F6
+#define KEY_GESTURE_SWIPE_DOWN		KEY_F7
+#define KEY_GESTURE_SWIPE_UP		KEY_F8
+
 #define WAKE_GESTURES_ENABLED	1
 
 #define LOGTAG			"WG"
@@ -277,7 +282,10 @@ static void detect_sweep2wake_v(int x, int y, bool st)
 						if (exec_county && (ktime_to_ms(ktime_get()) - firsty_time < SWEEP_TIMEOUT)) {
 #if (WAKE_GESTURES_ENABLED)
 							if (gestures_switch) {
-								report_gesture(3);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_UP, 1);
+								input_sync(wake_dev);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_UP, 0);
+								input_sync(wake_dev);
 							} else {
 #endif
 								wake_pwrtrigger();
@@ -306,7 +314,10 @@ static void detect_sweep2wake_v(int x, int y, bool st)
 						if (exec_county && (ktime_to_ms(ktime_get()) - firsty_time < SWEEP_TIMEOUT)) {
 #if (WAKE_GESTURES_ENABLED)
 							if (gestures_switch) {
-								report_gesture(4);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_DOWN, 1);
+								input_sync(wake_dev);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_DOWN, 0);
+								input_sync(wake_dev);
 							} else {
 #endif
 								wake_pwrtrigger();
@@ -362,7 +373,10 @@ static void detect_sweep2wake_h(int x, int y, bool st, bool scr_suspended)
 						if (exec_countx && (ktime_to_ms(ktime_get()) - firstx_time < SWEEP_TIMEOUT)) {
 #if (WAKE_GESTURES_ENABLED)
 							if (gestures_switch && scr_suspended) {
-								report_gesture(1);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_RIGHT, 1);
+								input_sync(wake_dev);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_RIGHT, 0);
+								input_sync(wake_dev);
 							} else {
 #endif
 								wake_pwrtrigger();
@@ -395,7 +409,10 @@ static void detect_sweep2wake_h(int x, int y, bool st, bool scr_suspended)
 						if (exec_countx) {
 #if (WAKE_GESTURES_ENABLED)
 							if (gestures_switch && scr_suspended) {
-								report_gesture(2);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_LEFT, 1);
+								input_sync(wake_dev);
+								input_report_key(wake_dev, KEY_GESTURE_SWIPE_LEFT, 0);
+								input_sync(wake_dev);
 							} else {
 #endif
 								wake_pwrtrigger();
@@ -668,6 +685,10 @@ static int __init wake_gestures_init(void)
 	}
 
 	input_set_capability(wake_dev, EV_KEY, KEY_POWER);
+	input_set_capability(wake_dev, EV_KEY, KEY_F5);
+	input_set_capability(wake_dev, EV_KEY, KEY_F6);
+	input_set_capability(wake_dev, EV_KEY, KEY_F7);
+	input_set_capability(wake_dev, EV_KEY, KEY_F8);
 	wake_dev->name = "wg_pwrkey";
 	wake_dev->phys = "wg_pwrkey/input0";
 
