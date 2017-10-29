@@ -57,7 +57,7 @@
 #define SWEEP_X_FINAL           270
 #define SWEEP_Y_NEXT            135
 #define DT2W_FEATHER		150
-#define DT2W_TIME 		250
+#define DT2W_TIME 		500
 
 /* Wake Gestures */
 #define SWEEP_TIMEOUT		300
