@@ -69,10 +69,10 @@
 #define SWEEP_DOWN		0x08
 #define VIB_STRENGTH 		30
 
-#define KEY_GESTURE_SWIPE_RIGHT       622
-#define KEY_GESTURE_SWIPE_LEFT        623
-#define KEY_GESTURE_SWIPE_DOWN        624
-#define KEY_GESTURE_SWIPE_UP          625
+#define KEY_GESTURE_SWIPE_RIGHT		KEY_F5
+#define KEY_GESTURE_SWIPE_LEFT		KEY_F6
+#define KEY_GESTURE_SWIPE_DOWN		KEY_F7
+#define KEY_GESTURE_SWIPE_UP		KEY_F8
 
 #define WAKE_GESTURES_ENABLED	1
 
@@ -685,10 +685,10 @@ static int __init wake_gestures_init(void)
 	}
 
 	input_set_capability(wake_dev, EV_KEY, KEY_POWER);
-	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_SWIPE_RIGHT);
-	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_SWIPE_LEFT);
-	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_SWIPE_DOWN);
-	input_set_capability(wake_dev, EV_KEY, KEY_GESTURE_SWIPE_UP);
+	input_set_capability(wake_dev, EV_KEY, KEY_F5);
+	input_set_capability(wake_dev, EV_KEY, KEY_F6);
+	input_set_capability(wake_dev, EV_KEY, KEY_F7);
+	input_set_capability(wake_dev, EV_KEY, KEY_F8);
 	wake_dev->name = "wg_pwrkey";
 	wake_dev->phys = "wg_pwrkey/input0";
 

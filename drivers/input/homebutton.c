@@ -4,12 +4,21 @@
 #include <linux/input.h>
 #include <linux/slab.h>
 
+#define FPS_ONENAV_DOWN   614
+#define FPS_ONENAV_UP     615
 #define FPS_ONENAV_TAP    616
 #define FPS_ONENAV_HOLD   617
-#define FPS_ONENAV_RIGHT  620
-#define FPS_ONENAV_LEFT   621
+#define FPS_ONENAV_YPLUS  618 // LEFT
+#define FPS_ONENAV_YMINUS 619 // RIGHT
+#define FPS_ONENAV_XPLUS  620 // DOWN
+#define FPS_ONENAV_XMINUS 621 // UP
+#define FPS_ONENAV_DBLTAP 622
+#define FPS_ONENAV_DBLTAP_BIS 112
+
+#define VIB_STRENGTH	30
 
 static DEFINE_MUTEX(hb_lock);
+extern void set_vibrate(int value);
 
 struct homebutton_data {
 	struct input_dev *hb_dev;
@@ -21,7 +30,6 @@ struct homebutton_data {
 	unsigned int haptic;
 	unsigned int haptic_off;
 	unsigned int key;
-	unsigned int key_dbltap;
 	unsigned int key_left;
 	unsigned int key_right;
 	unsigned int key_hold;
@@ -53,9 +61,10 @@ static void hb_input_callback(struct work_struct *unused) {
 	if (!hb_data.enable || !mutex_trylock(&hb_lock))
 		return;
 
-	input_report_key(hb_data.hb_dev, hb_data.current_key, 1);
-	input_sync(hb_data.hb_dev);
-	input_report_key(hb_data.hb_dev, hb_data.current_key, 0);
+	if (hb_data.haptic)
+		set_vibrate(VIB_STRENGTH);
+
+	input_report_key(hb_data.hb_dev, hb_data.current_key, hb_data.key_press);
 	input_sync(hb_data.hb_dev);
 
 	mutex_unlock(&hb_lock);
@@ -120,15 +129,31 @@ static bool hb_input_filter(struct input_handle *handle, unsigned int type,
     }
 		
 	switch (code) {
-        case FPS_ONENAV_TAP:
-        case FPS_ONENAV_HOLD:
-        case FPS_ONENAV_RIGHT:
-		case FPS_ONENAV_LEFT:
-            hb_data.current_key = code;
-            break;
-        case KEY_RESERVED:
-        default:
-            return false;
+		case FPS_ONENAV_TAP:
+			hb_data.current_key = hb_data.key;
+			break;
+		case FPS_ONENAV_HOLD:
+			hb_data.current_key = hb_data.key_hold;
+			break;
+		case FPS_ONENAV_YPLUS:
+			hb_data.current_key = hb_data.key_up;
+			break;
+		case FPS_ONENAV_YMINUS:
+			hb_data.current_key = hb_data.key_down;
+			break;
+		case FPS_ONENAV_XPLUS:
+			hb_data.current_key = hb_data.key_right;
+			break;
+		case FPS_ONENAV_XMINUS:
+			hb_data.current_key = hb_data.key_left;
+			break;
+		case FPS_ONENAV_DBLTAP_BIS:
+		case FPS_ONENAV_DBLTAP:
+			hb_data.current_key = hb_data.key_dbltap;
+			break;
+		case KEY_RESERVED:
+		default:
+			return false;
 	}
 
 	schedule_work(&hb_data.hb_input_work);
@@ -202,6 +227,7 @@ static ssize_t hb_haptic_store(struct device *dev,
 static DEVICE_ATTR(haptic, (S_IWUSR | S_IRUGO),
 	hb_haptic_show, hb_haptic_store);
 
+
 static ssize_t key_show(struct device *dev,
 		 struct device_attribute *attr, char *buf)
 {
@@ -251,6 +277,56 @@ static ssize_t key_hold_store(struct device *dev,
 
 static DEVICE_ATTR(key_hold, (S_IWUSR | S_IRUGO),
 	key_hold_show, key_hold_store);
+
+static ssize_t key_down_show(struct device *dev,
+		 struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", hb_data.key_down);
+}
+
+static ssize_t key_down_store(struct device *dev,
+		 struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	unsigned long input;
+
+	ret = kstrtoul(buf, 0, &input);
+	if (ret < 0)
+		return -EINVAL;
+
+	set_bit(input, hb_data.hb_dev->keybit);
+	hb_data.key_down = input;
+
+	return count;
+}
+
+static DEVICE_ATTR(key_down, (S_IWUSR | S_IRUGO),
+	key_down_show, key_down_store);
+
+static ssize_t key_up_show(struct device *dev,
+		 struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", hb_data.key_up);
+}
+
+static ssize_t key_up_store(struct device *dev,
+		 struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	unsigned long input;
+
+	ret = kstrtoul(buf, 0, &input);
+	if (ret < 0)
+		return -EINVAL;
+
+	set_bit(input, hb_data.hb_dev->keybit);
+	hb_data.key_up = input;
+
+	return count;
+}
+
+static DEVICE_ATTR(key_up, (S_IWUSR | S_IRUGO),
+	key_up_show, key_up_store);
 
 static ssize_t key_left_show(struct device *dev,
 		 struct device_attribute *attr, char *buf)
@@ -512,11 +588,18 @@ static int __init hb_init(void)
 		goto err_alloc_dev;
 	}
 
-	input_set_capability(hb_data.hb_dev, EV_KEY, FPS_ONENAV_TAP);
-	input_set_capability(hb_data.hb_dev, EV_KEY, FPS_ONENAV_HOLD);
-	input_set_capability(hb_data.hb_dev, EV_KEY, FPS_ONENAV_RIGHT);
-	input_set_capability(hb_data.hb_dev, EV_KEY, FPS_ONENAV_LEFT);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_HOME);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_POWER);
+	input_set_capability(hb_data.hb_dev, EV_KEY, 580); // APP_SWITCH
+	input_set_capability(hb_data.hb_dev, EV_KEY, 582); // VOICE_ASSIST
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_BACK);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_VOLUMEDOWN);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_VOLUMEUP);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_PLAYPAUSE);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_PREVIOUSSONG);
+	input_set_capability(hb_data.hb_dev, EV_KEY, KEY_NEXTSONG);
 	set_bit(EV_KEY, hb_data.hb_dev->evbit);
+	set_bit(KEY_HOME, hb_data.hb_dev->keybit);
 	hb_data.hb_dev->name = "qwerty";
 	hb_data.hb_dev->phys = "qwerty/input0";
 
@@ -555,6 +638,14 @@ static int __init hb_init(void)
 		pr_err("%s: sysfs_create_file failed for homebutton key\n", __func__);
 
 	rc = sysfs_create_file(hb_data.homebutton_kobj, &dev_attr_key_hold.attr);
+	if (rc)
+		pr_err("%s: sysfs_create_file failed for homebutton key\n", __func__);
+
+	rc = sysfs_create_file(hb_data.homebutton_kobj, &dev_attr_key_down.attr);
+	if (rc)
+		pr_err("%s: sysfs_create_file failed for homebutton key\n", __func__);
+
+	rc = sysfs_create_file(hb_data.homebutton_kobj, &dev_attr_key_up.attr);
 	if (rc)
 		pr_err("%s: sysfs_create_file failed for homebutton key\n", __func__);
 
