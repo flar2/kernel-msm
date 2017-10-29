@@ -1,5 +1,5 @@
 /*
- * include/linux/wake_gestures.h
+ * include/linux/screen_off_gestures.h
  *
  * Copyright (c) 2013-15, Aaron Segaert <asegaert@gmail.com>
  *
@@ -18,16 +18,17 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef _LINUX_WAKE_GESTURES_H
-#define _LINUX_WAKE_GESTURES_H
+#ifndef _LINUX_SCREEN_OFF_GESTURES_H
+#define _LINUX_SCREEN_OFF_GESTURES_H
 
 #include <linux/input.h>
 
-extern int s2w_switch;
+extern int gesture_swipe_right;
+extern int gesture_swipe_left;
+extern int gesture_swipe_down;
+extern int gesture_swipe_up;
 extern int dt2w_switch;
-extern bool gestures_enabled;
 bool scr_suspended(void);
-void set_vibrate(int value);
 
-#endif	/* _LINUX_WAKE_GESTURES_H */
+#endif	/* _LINUX_SCREEN_OFF_GESTURES_H */
 
