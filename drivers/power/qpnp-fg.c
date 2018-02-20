@@ -548,6 +548,7 @@ struct fg_chip {
 	bool			fg_shutdown;
 	bool			use_soft_jeita_irq;
 	bool			allow_false_negative_isense;
+	bool			fg_force_restart_enable;
 	struct delayed_work	update_jeita_setting;
 	struct delayed_work	update_sram_data;
 	struct delayed_work	update_temp_work;
@@ -1553,7 +1554,8 @@ static int __fg_interleaved_mem_write(struct fg_chip *chip, u8 *val,
 
 		rc = fg_check_iacs_ready(chip);
 		if (rc) {
-			pr_debug("IACS_RDY failed rc=%d\n", rc);
+			pr_err("IACS_RDY failed at addr %x offset %d rc=%d\n",
+				address, offset, rc);
 			return rc;
 		}
 
@@ -1630,7 +1632,8 @@ static int __fg_interleaved_mem_read(struct fg_chip *chip, u8 *val, u16 address,
 
 		rc = fg_check_iacs_ready(chip);
 		if (rc) {
-			pr_debug("IACS_RDY failed rc=%d\n", rc);
+			pr_err("IACS_RDY failed at addr %x offset %d rc=%d\n",
+				address, offset, rc);
 			return rc;
 		}
 
@@ -1713,7 +1716,8 @@ static int fg_interleaved_mem_config(struct fg_chip *chip, u8 *val,
 
 	rc = fg_check_iacs_ready(chip);
 	if (rc) {
-		pr_debug("IACS_RDY failed rc=%d\n", rc);
+		pr_err("IACS_RDY failed before set addr %x offset %d rc=%d\n",
+			address, offset, rc);
 		return rc;
 	}
 
@@ -1726,7 +1730,8 @@ static int fg_interleaved_mem_config(struct fg_chip *chip, u8 *val,
 
 	rc = fg_check_iacs_ready(chip);
 	if (rc)
-		pr_debug("IACS_RDY failed rc=%d\n", rc);
+		pr_err("IACS_RDY failed after set addr %x offset %d rc=%d\n",
+			address, offset, rc);
 
 	return rc;
 }
@@ -1737,7 +1742,7 @@ static int fg_interleaved_mem_config(struct fg_chip *chip, u8 *val,
 static int fg_interleaved_mem_read(struct fg_chip *chip, u8 *val, u16 address,
 						int len, int offset)
 {
-	int rc = 0, orig_address = address;
+	int rc = 0, ret, orig_address = address;
 	u8 start_beat_count, end_beat_count, count = 0;
 	bool retry = false;
 
@@ -1818,9 +1823,14 @@ retry:
 	}
 out:
 	/* Release IMA access */
-	rc = fg_masked_write(chip, MEM_INTF_CFG(chip), IMA_REQ_ACCESS, 0, 1);
-	if (rc)
-		pr_err("failed to reset IMA access bit rc = %d\n", rc);
+	ret = fg_masked_write(chip, MEM_INTF_CFG(chip), IMA_REQ_ACCESS, 0, 1);
+	if (ret)
+		pr_err("failed to reset IMA access bit rc = %d\n", ret);
+
+	if (rc) {
+		mutex_unlock(&chip->rw_lock);
+		goto exit;
+	}
 
 	if (retry) {
 		retry = false;
@@ -1836,7 +1846,7 @@ exit:
 static int fg_interleaved_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 							int len, int offset)
 {
-	int rc = 0, orig_address = address;
+	int rc = 0, ret, orig_address = address;
 	u8 count = 0;
 
 	if (chip->fg_shutdown)
@@ -1881,9 +1891,9 @@ retry:
 
 out:
 	/* Release IMA access */
-	rc = fg_masked_write(chip, MEM_INTF_CFG(chip), IMA_REQ_ACCESS, 0, 1);
-	if (rc)
-		pr_err("failed to reset IMA access bit rc = %d\n", rc);
+	ret = fg_masked_write(chip, MEM_INTF_CFG(chip), IMA_REQ_ACCESS, 0, 1);
+	if (ret)
+		pr_err("failed to reset IMA access bit rc = %d\n", ret);
 
 	mutex_unlock(&chip->rw_lock);
 	fg_relax(&chip->memif_wakeup_source);
@@ -3810,6 +3820,32 @@ static int get_vbat_est_diff(struct fg_chip *chip)
 #define CBITS_INPUT_FILTER_REG		0x4B4
 #define IBATTF_TAU_MASK			0x38
 #define IBATTF_TAU_99_S			0x30
+static int fg_do_restart(struct fg_chip *chip, bool write_profile);
+static int fg_vbat_est_check(struct fg_chip *chip)
+{
+	int rc = 0;
+	int vbat_est_diff, vbat_est_thr_uv;
+	bool batt_missing = is_battery_missing(chip);
+
+	vbat_est_diff = get_vbat_est_diff(chip);
+	vbat_est_thr_uv = chip->learning_data.vbat_est_thr_uv;
+	pr_info("vbat(%d),est-vbat(%d),diff(%d),threshold(%d)\n",
+			fg_data[FG_DATA_VOLTAGE].value,
+			fg_data[FG_DATA_CPRED_VOLTAGE].value,
+			vbat_est_diff, vbat_est_thr_uv);
+
+	if ((vbat_est_diff > vbat_est_thr_uv)
+		&& chip->fg_force_restart_enable
+		&& chip->first_profile_loaded
+		&& !chip->fg_restarting
+		&& !batt_missing) {
+		pr_info("vbat_est_diff is larger than vbat_est_thr_uv,so force fg restart\n");
+		rc = fg_do_restart(chip, false);
+		if (rc)
+			pr_err("fg restart failed: %d\n", rc);
+	}
+	return rc;
+}
 static int fg_cap_learning_check(struct fg_chip *chip)
 {
 	u8 data[4];
@@ -4093,6 +4129,7 @@ static void status_change_work(struct work_struct *work)
 		}
 	}
 	fg_cap_learning_check(chip);
+	fg_vbat_est_check(chip);
 	schedule_work(&chip->update_esr_work);
 
 	if (chip->wa_flag & USE_CC_SOC_REG) {
@@ -7273,6 +7310,10 @@ static int fg_of_init(struct fg_chip *chip)
 
 	sense_type = of_property_read_bool(chip->spmi->dev.of_node,
 					"qcom,ext-sense-type");
+	chip->fg_force_restart_enable =
+			of_property_read_bool(chip->spmi->dev.of_node,
+			"qcom,fg-force-restart-enable");
+
 	if (rc == 0) {
 		if (fg_sense_type < 0)
 			fg_sense_type = sense_type;
