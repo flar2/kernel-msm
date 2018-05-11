@@ -1174,6 +1174,9 @@ static int check_version(Elf_Shdr *sechdrs,
 	if(!strncmp("core_ctl", mod->name, 8))
 		return 1;
 
+	if(!strncmp("isdbt", mod->name, 5))
+		return 1;
+
 	if(!strncmp("qcrypto_module", mod->name, 14))
 		return 1;
 
